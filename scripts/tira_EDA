@@ -1,0 +1,16 @@
+   duration   impressions  ...  profit_loss_flag  conversion_rate
+count  55555.000000  55555.000000  ...      55555.000000     55555.000000
+mean      17.556134  55004.438826  ...          0.499991        22.493856
+min        5.000000  10001.000000  ...          0.000000         1.124744
+25%       11.000000  33652.000000  ...          0.000000        14.959395
+50%       18.000000  54980.000000  ...          0.000000        20.474880
+75%       24.000000  76353.000000  ...          1.000000        28.082877
+max       30.000000  99999.000000  ...          1.000000       338.427948
+std        7.316484  25370.820976  ...          0.500005        11.957684
+
+Overall Business Insights:
+1)Campaign duration is typically around 18 days, with most campaigns lasting between 11 and 24 days.
+2)Campaign reach is substantial, averaging around 55,000 impressions, though there is significant variation.
+3)Profit-loss classes are well balanced (roughly 50% profitable and 50% not), making the dataset suitable for classification tasks.
+4)The average conversion rate is 22.49%, indicating that about one in five users who click an ad complete the desired action.
+5)The maximum conversion rate of 338.43% is unusual and should be investigated before drawing business conclusions from it, especially if the data is expected to reflect real-world marketing campaigns.
