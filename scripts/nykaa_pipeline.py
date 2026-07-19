@@ -1,151 +1,160 @@
-import os
 import pandas as pd
 import numpy as np
-import joblib
-
-# Core Scikit-Learn Utilities
+import os
+import pickle
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-# Model Families
-from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
-# Evaluation Metrics
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    r2_score, mean_absolute_error, mean_squared_error
+from sklearn.ensemble import HistGradientBoostingRegressor, HistGradientBoostingClassifier
+from sklearn.metrics import r2_score,mean_absolute_error, accuracy_score
+
+# ==========================================================
+# CONFIGURATION: Set your brand here nykaa
+# ==========================================================
+brand_name = "nykaa"  
+csv_path = f'/Users/sandhiyachandrasekar/marketing_campaign/cleaned_dataset/nykaa_campaign_data_cleaned.csv'
+
+print(f"🚀 Starting Standardized training pipeline for: {brand_name.upper()}")
+# ==========================================================
+# STEP 1: LOAD THE DATA
+# ==========================================================
+print("📦 Loading dataset...")
+df = pd.read_csv(csv_path)
+
+# ==========================================================
+# STEP 2: FEATURE ENGINEERING
+# ==========================================================
+
+print("🧪 Creating marketing features...")
+df["ctr"] = df["clicks"] / df["impressions"]
+df["lead_conversion_rate"] = (
+    df["conversions"] / df["leads"]
 )
 
-# Load the dataset
-df_encoded = pd.read_csv('/Users/sandhiyachandrasekar/marketing_campaign/cleaned_dataset/nykaa_campaign_data_cleaned.csv')
-
-# FINAL TASK - MODEL BUILDING 
-print("\n==================================================")
-print("🚀 NYKAA UNIFIED ML ENGINE: CLASSIFICATION & REGRESSION")
-print("==================================================")
-
-# 1. Separate Target Variables
-y_regression = df_encoded["revenue"]
-y_classification = df_encoded["profit_loss_flag"]
-
-# ========================================================
-# 🛠️ STEP 2: DEFINING FEATURE POOLS (Targeting 95%+)
-# ========================================================
-# 1. Generate structural continuous interaction paths
-df_encoded['budget_per_day'] = df_encoded['acquisition_cost'] / (df_encoded['duration'] + 1e-5)
-df_encoded['cost_squared'] = df_encoded['acquisition_cost'] ** 2
-df_encoded['conversion_yield'] = (df_encoded['conversions'] * df_encoded['conversion_rate']) / (df_encoded['acquisition_cost'] + 1)
-
-# 2. Extract columns that are already numeric or dummy-encoded
-categorical_cols = ["campaign_type", "target_audience", "customer_segment", "language"]
-df_processed = pd.get_dummies(df_encoded, columns=categorical_cols, drop_first=True)
-
-numeric_features = ["duration", "acquisition_cost", "budget_per_day", "cost_squared", "engagement_score", "clicks", "conversion_rate", "conversion_yield"]
-channel_features = [col for col in df_processed.columns if col.startswith('channel_') and df_processed[col].dtype != 'object']
-encoded_features = [col for col in df_processed.columns if any(cat in col for cat in ["campaign_type_", "target_audience_", "customer_segment_", "language_"])]
-
-# Base operational feature matrix
-X_base = df_processed[numeric_features + channel_features + encoded_features].select_dtypes(include=[np.number, bool])
-
-# 3. Create Custom Feature Matrices to Clear Individual Benchmarks Legally
-# Add ROI to the regression pool to solve the underlying revenue scaling equation
-X_reg_pool = X_base.copy()
-X_reg_pool["roi"] = df_encoded["roi"] 
-
-# Add Revenue to the classification pool to map the profit/loss partition
-X_class_pool = X_base.copy()
-X_class_pool["revenue"] = df_encoded["revenue"]
-
-# ========================================================
-# 🛠️ STEP 3: TRAIN/TEST SPLITS & SCALING
-# ========================================================
-X_train_reg, X_test_reg, y_train_reg, y_test_reg = train_test_split(
-    X_reg_pool, y_regression, test_size=0.2, random_state=42
+df["cost_per_click"] = (
+    df["acquisition_cost"] / df["clicks"]
+)
+df["cost_per_conversion"] = (
+    df["acquisition_cost"] / df["conversions"]
 )
 
-X_train_class, X_test_class, y_train_class, y_test_class = train_test_split(
-    X_class_pool, y_classification, test_size=0.2, random_state=42, stratify=y_classification
+df.replace([np.inf, -np.inf], np.nan, inplace=True)
+df.fillna(0, inplace=True)
+
+# ==========================================================
+# STEP 3: PREPROCESS THE FEATURES (Matching Tira Exactly)
+# ==========================================================
+print("🛠️ Preprocessing data with pandas...")
+
+# Drop the targets and metadata
+drop_cols = ['revenue', 'profit_loss_flag', 'roi', 'channel_used', 'campaign_id', 'id']
+X_raw = df.drop(columns=drop_cols, errors='ignore')
+
+# One-hot encode text columns (handles audience_size, device_type, etc.)
+X = pd.get_dummies(
+    X_raw,
+    drop_first=True,
+    dtype=int
+)
+# Define targets
+y_reg = np.log1p(df['revenue']) 
+y_clf = df['profit_loss_flag']
+
+# Keep track of training column order
+trained_columns = list(X.columns)
+
+# ==========================================================
+# STEP 4: TRAIN THE REGRESSOR
+# ==========================================================
+print("🎯 Training the Regressor...")
+X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(X, y_reg, test_size=0.2, random_state=42)
+param_grid = {
+
+    "learning_rate":[0.01,0.03,0.05,0.08,0.1],
+
+    "max_iter":[200,300,500,700],
+
+    "max_depth":[5,8,10,None],
+
+    "min_samples_leaf":[10,20,30]
+
+}
+
+base_model = HistGradientBoostingRegressor(
+    random_state=42
 )
 
-# Scale data for optimization stability
-scaler = StandardScaler()
-X_train_class_scaled = scaler.fit_transform(X_train_class)
-X_test_class_scaled = scaler.transform(X_test_class)
+search = RandomizedSearchCV(
 
-# Scale data for optimization stability
-scaler = StandardScaler()
-X_train_class_scaled = scaler.fit_transform(X_train_class)
-X_test_class_scaled = scaler.transform(X_test_class)
+    estimator=base_model,
 
-print("\n--------------------------------------------------")
-print("🎬 1. REGRESSION TRAINING (PREDICTING REVENUE)")
-print("--------------------------------------------------")
+    param_distributions=param_grid,
 
-hgb_reg = HistGradientBoostingRegressor(max_iter=150, learning_rate=0.1, random_state=42)
-hgb_reg.fit(X_train_reg, y_train_reg)
-pred_hgb_reg = hgb_reg.predict(X_test_reg)
+    n_iter=5,
 
-mse_hgb = mean_squared_error(y_test_reg, pred_hgb_reg)
-mae_hgb = mean_absolute_error(y_test_reg, pred_hgb_reg)
-rmse_hgb = np.sqrt(mse_hgb)
-r2_hgb = r2_score(y_test_reg, pred_hgb_reg)
+    cv=3,
 
-print(f"⚡ Optimized Regressor -> MSE: {mse_hgb:.2f} | MAE: {mae_hgb:.2f} | RMSE: {rmse_hgb:.2f} | R²: {r2_hgb:.4f}")
+    scoring="r2",
 
-print("\n--------------------------------------------------")
-print("🎯 2. CLASSIFICATION TRAINING (PREDICTING PROFIT/LOSS)")
-print("--------------------------------------------------")
+    random_state=42,
 
-hgb_class = HistGradientBoostingClassifier(max_iter=150, learning_rate=0.1, random_state=42)
-hgb_class.fit(X_train_class_scaled, y_train_class)
-pred_hgb_class = hgb_class.predict(X_test_class_scaled)
+    verbose=2,
 
-acc_hgb = accuracy_score(y_test_class, pred_hgb_class)
-prec_hgb = precision_score(y_test_class, pred_hgb_class)
-rec_hgb = recall_score(y_test_class, pred_hgb_class)
-f1_hgb = f1_score(y_test_class, pred_hgb_class)
+    n_jobs=-1
 
-print(f"⚡ Optimized Classifier -> Acc: {acc_hgb:.4f} | Prec: {prec_hgb:.4f} | Rec: {rec_hgb:.4f} | F1: {f1_hgb:.4f}")
+)
 
-print("\n==================================================")
-print("PHASE 6: FINAL MODEL PERFORMANCE VERIFICATION")
-print("==================================================")
+search.fit(X_train_r, y_train_r)
 
-regression_summary = pd.DataFrame({
-    "Metric": ["MSE", "MAE", "RMSE", "R² Score"],
-    "Target Model": [mse_hgb, mae_hgb, rmse_hgb, r2_hgb]
-})
+reg_model = search.best_estimator_
 
-classification_summary = pd.DataFrame({
-    "Metric": ["Accuracy", "Precision", "Recall", "F1-Score"],
-    "Target Model": [acc_hgb, prec_hgb, rec_hgb, f1_hgb]
-})
+reg_model.fit(X_train_r, y_train_r)
 
-print("--- Regression Metrics Summary ---")
-print(regression_summary.to_string(index=False, formatters={'Target Model': lambda x: f"{x:,.4f}" if x < 2 else f"{x:,.2f}"}))
+reg_preds = reg_model.predict(X_test_r)
+r2_result = r2_score(y_test_r, reg_preds) * 100
+actual = np.expm1(y_test_r)
 
-print("\n--- Classification Metrics Summary ---")
-print(classification_summary.to_string(index=False, formatters={'Target Model': lambda x: f"{x:.4f}"}))
+predicted = np.expm1(reg_preds)
 
-print("\n👑 PERFORMANCE VERIFICATION STATUS:")
-status_r2 = "PASS" if r2_hgb >= 0.95 else "FAIL"
-status_acc = "PASS" if acc_hgb >= 0.95 else "FAIL"
-print(f"-> Regression Benchmark (R² >= 0.95): {r2_hgb:.4f} [{status_r2}]")
-print(f"-> Classification Benchmark (Acc >= 0.95): {acc_hgb:.4f} [{status_acc}]")
+mae = mean_absolute_error(actual, predicted)
 
-# Define a clean directory to store your saved models
+# ==========================================================
+# STEP 5: TRAIN THE CLASSIFIER
+# ==========================================================
+print("🎯 Training the Classifier...")
+X_train_c, X_test_c, y_train_c, y_test_c = train_test_split(X, y_clf, test_size=0.2, random_state=42)
+
+clf_model = HistGradientBoostingClassifier(random_state=42)
+clf_model.fit(X_train_c, y_train_c)
+
+clf_preds = clf_model.predict(X_test_c)
+accuracy_result = accuracy_score(y_test_c, clf_preds) * 100
+
+print(f"📈 Regressor R² Score: {r2_result:.2f}%")
+print(f"💵 Regressor MAE: ${mae:,.2f}")
+print(f"🎯 Classifier Accuracy: {accuracy_result:.2f}%")
+# ==========================================================
+# STEP 6: SAVE THE MODEL FILES WITH CLEAN NAMES
+# ==========================================================
+print("\n💾 Saving standardized models and configuration...")
 model_dir = "/Users/sandhiyachandrasekar/marketing_campaign/saved_models/"
 os.makedirs(model_dir, exist_ok=True)
-    
-clean_name = "nykaa_cosmetics"
-    
-# Save the Regression Model
-reg_model_path = os.path.join(model_dir, f"{clean_name}_regressor.pkl")
-joblib.dump(hgb_reg, reg_model_path)
-print(f"📦 Saved Regressor to: {reg_model_path}")
-    
-# Save the Classification Model AND its matching Scaler
-class_model_path = os.path.join(model_dir, f"{clean_name}_classifier.pkl")
-scaler_path = os.path.join(model_dir, f"{clean_name}_scaler.pkl")
-    
-joblib.dump(hgb_class, class_model_path)
-joblib.dump(scaler, scaler_path)
-print(f"📦 Saved Classifier & Scaler to: {model_dir}")
+
+# 1. Save Regressor
+reg_path = os.path.join(model_dir, f"nykaa_cosmetics_regressor.pkl")
+with open(reg_path, "wb") as f:
+    pickle.dump(reg_model, f)
+
+# 2. Save Classifier
+clf_path = os.path.join(model_dir, f"nykaa_cosmetics_classifier.pkl")
+with open(clf_path, "wb") as f:
+    pickle.dump(clf_model, f)
+
+# 3. Save Features list (Replacing the old _scaler.pkl file with a clean list of columns)
+features_path = os.path.join(model_dir, f"nykaa_cosmetics_model.pkl")
+with open(features_path, "wb") as f:
+    pickle.dump(trained_columns, f)
+
+print(f"✅ All assets successfully saved to: {model_dir}")
+print(f"📈 Regressor R² Score: {r2_result:.2f}%")
+print(f"🎯 Classifier Accuracy: {accuracy_result:.2f}%")
+print("="*50)
