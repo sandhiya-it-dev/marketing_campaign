@@ -49,7 +49,7 @@ Every operational brand pipeline enforces strict verification thresholds:
 * **Profit/Loss Classifier:** Accuracy = **0.9239**  `[PASS]`
 
 ### 🏆 Purplle Pipeline Performance Status
-* **Continuous Revenue Regressor:** R² = **0.7932%**`[PASS]`
+* **Continuous Revenue Regressor:** R² = **0.7932**`[PASS]`
 * **Profit/Loss Classifier:** Accuracy = **0.9230**  `[PASS]`
 
 ### 🏆 Tira Pipeline Performance Status
